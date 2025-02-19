@@ -99,7 +99,7 @@ public class WirecraftPlugin extends JavaPlugin implements Listener {
         }
 
         // Test for block position
-        if(block.getX() == 0 && block.getY() == 0 && block.getZ() == 0) {
+        if(block.getX() == 0 && block.getY() == 64 && block.getZ() == 0) {
             getServer().broadcast(Component.text(
                 "Output block is "
                 + (block.isBlockPowered() ? "ON" : "OFF")
