@@ -1,5 +1,6 @@
 QT       += core gui
 QT       += network
+QT       += serialport
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -14,7 +15,8 @@ SOURCES += \
     mainwindow.cpp
 
 HEADERS += \
-    mainwindow.h
+    mainwindow.h \
+    wirecraft.h
 
 FORMS += \
     mainwindow.ui
