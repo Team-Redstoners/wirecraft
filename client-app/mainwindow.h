@@ -2,6 +2,7 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <QSerialPort>
 #include <QTcpSocket>
 
 QT_BEGIN_NAMESPACE
@@ -18,17 +19,20 @@ class MainWindow : public QMainWindow
 
     private:
         Ui::MainWindow *ui;
-        QTcpSocket *tcpSock;    // TCP socket
-        QByteArray tcpBuf;     // TCP buffer
+        QSerialPort *serialPort;
+        QTcpSocket *tcpSock;
 
     public slots:
         void logTextEdit_appendText(QString logStr);
-        void on_connectPushButton_clicked();
-        void on_disconnectPushButton_clicked();
+        void on_serialConnectPushButton_clicked();
+        void on_serialDisconnectPushButton_clicked();
+        void on_serverConnectPushButton_clicked();
+        void on_serverDisconnectPushButton_clicked();
+        void serialPort_readFwdToTcp();
         void tcpSock_logConn();
         void tcpSock_logDisconn();
         void tcpSock_logErr(QAbstractSocket::SocketError sockErr);
-        void tcpSock_read();
+        void tcpSock_readFwdToSerial();
 };
 
 #endif // MAINWINDOW_H
