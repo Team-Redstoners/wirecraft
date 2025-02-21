@@ -55,7 +55,7 @@ void MainWindow::on_serialConnectPushButton_clicked()
     // Oh... it was using the label, not the line edit value.  Oops.
     serialPort->setPortName(ui->serialPortLineEdit->text());
 
-    serialPort->setBaudRate(QSerialPort::Baud115200, QSerialPort::AllDirections);
+    serialPort->setBaudRate(QSerialPort::Baud57600, QSerialPort::AllDirections);
     serialPort->setDataBits(QSerialPort::UnknownDataBits);
     serialPort->setParity(QSerialPort::NoParity);
     serialPort->setStopBits(QSerialPort::UnknownStopBits);
