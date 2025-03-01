@@ -3,6 +3,7 @@
 
 #include <QMainWindow>
 #include <QSerialPort>
+#include <QTcpServer>
 #include <QTcpSocket>
 
 QT_BEGIN_NAMESPACE
@@ -20,17 +21,18 @@ class MainWindow : public QMainWindow
     private:
         Ui::MainWindow *ui;
         QSerialPort *serialPort;
+        QTcpServer *tcpServer;
         QTcpSocket *tcpSock;
 
     public slots:
         void logTextEdit_appendText(QString logStr);
         void on_serialConnectPushButton_clicked();
         void on_serialDisconnectPushButton_clicked();
-        void on_serverConnectPushButton_clicked();
-        void on_serverDisconnectPushButton_clicked();
+        void on_closeServerPushButton_clicked();
+        void on_startServerPushButton_clicked();
         void serialPort_readFwdToTcp();
-        void tcpSock_logConn();
-        void tcpSock_logDisconn();
+        void tcpServer_handleConn();
+        void tcpServer_logErr(QAbstractSocket::SocketError sockErr);
         void tcpSock_logErr(QAbstractSocket::SocketError sockErr);
         void tcpSock_readFwdToSerial();
 };

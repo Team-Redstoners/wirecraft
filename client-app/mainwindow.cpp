@@ -5,6 +5,7 @@
 #include <QHostAddress>
 #include <QSerialPort>
 #include <QTcpSocket>
+#include <QtNetwork>
 
 // ================================
 // Setup
@@ -14,19 +15,23 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
-    // Set up UI
+    // Set up UI.
     ui->setupUi(this);
 
-    // Set up serial port
+    // Set up serial port.
     serialPort = new QSerialPort(this);
     QObject::connect(serialPort, &QSerialPort::readyRead, this, &MainWindow::serialPort_readFwdToTcp);
 
-    // Set up TCP socket and related events
+    // Set up TCP socket
+    //
+    // NOTE: This needs to be here.
+    // If not, the app will crash if the "Close Server" button is pressed before establishing a connection.
     tcpSock = new QTcpSocket(this);
-    QObject::connect(tcpSock, &QTcpSocket::connected, this, &MainWindow::tcpSock_logConn);
-    QObject::connect(tcpSock, &QTcpSocket::disconnected, this, &MainWindow::tcpSock_logDisconn);
-    QObject::connect(tcpSock, &QTcpSocket::errorOccurred, this, &MainWindow::tcpSock_logErr);
-    QObject::connect(tcpSock, &QTcpSocket::readyRead, this, &MainWindow::tcpSock_readFwdToSerial);
+
+    // Set up TCP server and related events.
+    tcpServer = new QTcpServer(this);
+    QObject::connect(tcpServer, &QTcpServer::acceptError, this, &MainWindow::tcpSock_logErr);
+    QObject::connect(tcpServer, &QTcpServer::newConnection, this, &MainWindow::tcpServer_handleConn);
 }
 
 MainWindow::~MainWindow()
@@ -38,7 +43,7 @@ MainWindow::~MainWindow()
 // User Interface
 // ================================
 
-// Append generic text to log text edit box
+// Append generic text to log text edit box.
 void MainWindow::logTextEdit_appendText(QString logStr)
 {
     ui->logTextEdit->append(logStr);
@@ -48,14 +53,11 @@ void MainWindow::logTextEdit_appendText(QString logStr)
 // Serial Port
 // ================================
 
-// Configure and open serial connection
+// Configure and open serial connection.
 void MainWindow::on_serialConnectPushButton_clicked()
 {
-    // Why doesn't this work when I use a non-hardcoded string??
-    // Oh... it was using the label, not the line edit value.  Oops.
     serialPort->setPortName(ui->serialPortLineEdit->text());
-
-    serialPort->setBaudRate(QSerialPort::Baud57600, QSerialPort::AllDirections);
+    serialPort->setBaudRate(QSerialPort::Baud115200, QSerialPort::AllDirections);
     serialPort->setDataBits(QSerialPort::UnknownDataBits);
     serialPort->setParity(QSerialPort::NoParity);
     serialPort->setStopBits(QSerialPort::UnknownStopBits);
@@ -71,7 +73,7 @@ void MainWindow::on_serialConnectPushButton_clicked()
     }
 }
 
-// Close serial connection
+// Close serial connection.
 void MainWindow::on_serialDisconnectPushButton_clicked()
 {
     if(serialPort->isOpen())
@@ -81,74 +83,121 @@ void MainWindow::on_serialDisconnectPushButton_clicked()
     }
 }
 
-// Read serial data and write it to TCP socket
+// Read serial data and write it to TCP socket.
 void MainWindow::serialPort_readFwdToTcp()
 {
-    const QByteArray serialBuf = serialPort->readAll();
+    const QByteArray serialBuf = serialPort->readAll().simplified();
     tcpSock->write(serialBuf, serialBuf.length());
+
+#ifdef DEBUG_ENABLE
+    logTextEdit_appendText("[Serial->TCP] " + serialBuf.toHex());
+#endif
 }
 
 // ================================
 // Network
 // ================================
 
-// Connect to server
-void MainWindow::on_serverConnectPushButton_clicked()
+// Close the client app server.
+void MainWindow::on_closeServerPushButton_clicked()
 {
-    tcpSock->abort();
+    if(tcpSock->isValid())
+    {
+        tcpSock->close();
+        logTextEdit_appendText(WCSTR_TCPSOCK_CLOSED);
+    }
 
-    logTextEdit_appendText(WCSTR_TCPCONN_ATTEMPT + ui->ipAddrLineEdit->text() + ":" + ui->portLineEdit->text());
-
-    QString ipAddr = ui->ipAddrLineEdit->text();
-    int port = ui->portLineEdit->text().toInt();
-
-    tcpSock->connectToHost(ipAddr, port);
+    if(tcpServer->isListening())
+    {
+        tcpServer->close();
+        logTextEdit_appendText(WCSTR_SERVER_CLOSE);
+    }
 }
 
-// Disconnect from server
-void MainWindow::on_serverDisconnectPushButton_clicked()
+// Start the client app server.
+void MainWindow::on_startServerPushButton_clicked()
 {
-    tcpSock->disconnectFromHost();
+    // The following code was pulled almost directly from the following example:
+    // https://code.qt.io/cgit/qt/qtbase.git/tree/examples/network/fortuneserver/server.cpp?h=6.8
+
+    tcpServer->listen(QHostAddress::Any, ui->serverPortLineEdit->text().toInt());
+
+    QString ipAddr;
+    const QList<QHostAddress> ipAddrList = QNetworkInterface::allAddresses();
+
+    // Set host address to first non-localhost address.
+    for(const QHostAddress &hostAddr : ipAddrList)
+    {
+        if(hostAddr != QHostAddress::LocalHost && hostAddr.toIPv4Address())
+        {
+            ipAddr = hostAddr.toString();
+            break;
+        }
+    }
+
+    // Otherwise, use localhost address.
+    if(ipAddr.isEmpty())
+    {
+        ipAddr = QHostAddress(QHostAddress::LocalHost).toString();
+    }
+
+    logTextEdit_appendText(WCSTR_SERVER_START + ipAddr + ":" + ui->serverPortLineEdit->text() + ".");
 }
 
-// Log message when TCP socket connects to server
-void MainWindow::tcpSock_logConn()
+// Handle incoming connections to client app server.
+void MainWindow::tcpServer_handleConn()
 {
-    logTextEdit_appendText(WCSTR_TCPCONN_SUCCESS);
+    // Set TCP socket to next incoming connection.
+    tcpSock = tcpServer->nextPendingConnection();
+    logTextEdit_appendText(WCSTR_SVCONN_INCOMING + tcpSock->peerAddress().toString() + ".");
+
+    if(tcpSock->isValid())
+    {
+        logTextEdit_appendText(WCSTR_SVCONN_CONNECTED);
+
+        // Set up TCP socket and related events.
+        QObject::connect(tcpSock, &QTcpSocket::errorOccurred, this, &MainWindow::tcpSock_logErr);
+        QObject::connect(tcpSock, &QTcpSocket::readyRead, this, &MainWindow::tcpSock_readFwdToSerial);
+    }
+    else
+    {
+        logTextEdit_appendText(WCSTR_TCPSOCK_INVALID);
+    }
 }
 
-// Log message when TCP socket disconnects from server
-void MainWindow::tcpSock_logDisconn()
-{
-    logTextEdit_appendText(WCSTR_TCPCONN_DISCONN);
-}
-
-// Log error when TCP connection fails
-void MainWindow::tcpSock_logErr(QAbstractSocket::SocketError sockErr)
+// Log error when TCP server connection fails
+void MainWindow::tcpServer_logErr(QAbstractSocket::SocketError sockErr)
 {
     switch(sockErr)
     {
-        case QAbstractSocket::ConnectionRefusedError:
-            logTextEdit_appendText(WCSTR_TCPERR_REFUSED);
-            break;
-
-        case QAbstractSocket::HostNotFoundError:
-            logTextEdit_appendText(WCSTR_TCPERR_NOTFOUND);
-            break;
-
-        case QAbstractSocket::RemoteHostClosedError:
-            logTextEdit_appendText(WCSTR_TCPERR_HOSTCLOSE);
-            break;
-
         default:
-            logTextEdit_appendText(WCSTR_TCPERR_GENERIC);
+            logTextEdit_appendText(WCSTR_TCPERR_UNKNOWN);
             break;
     }
 }
 
-// Read TCP data and write it to serial port
+// Log error when TCP socket connection fails.
+void MainWindow::tcpSock_logErr(QAbstractSocket::SocketError sockErr)
+{
+    switch(sockErr)
+    {
+        case QAbstractSocket::RemoteHostClosedError:
+            logTextEdit_appendText(WCSTR_TCPERR_DISCONN);
+            break;
+
+        default:
+            logTextEdit_appendText(WCSTR_TCPERR_UNKNOWN);
+            break;
+    }
+}
+
+// Read TCP data and write it to serial port.
 void MainWindow::tcpSock_readFwdToSerial()
 {
-    const QByteArray tcpBuf = tcpSock->readAll();
+    const QByteArray tcpBuf = tcpSock->readAll().simplified();
     serialPort->write(tcpBuf, tcpBuf.length());
+
+#ifdef DEBUG_ENABLE
+    logTextEdit_appendText("[TCP->Serial] " + tcpBuf.toHex());
+#endif
 }
