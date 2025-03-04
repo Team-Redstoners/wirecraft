@@ -5,6 +5,11 @@ import net.kyori.adventure.text.Component;
 import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -16,6 +21,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockRedstoneEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
 import org.firmata4j.IODevice;
 import org.firmata4j.IODeviceEventListener;
 import org.firmata4j.IOEvent;
@@ -24,6 +30,8 @@ import org.firmata4j.PinEventListener;
 import org.firmata4j.Pin.Mode;
 import org.firmata4j.firmata.FirmataDevice;
 import org.firmata4j.transport.NetworkTransport;
+import org.firmata4j.transport.SerialTransport;
+import org.firmata4j.transport.TransportInterface;
 
 public class WirecraftPlugin extends JavaPlugin implements Listener {
 
@@ -31,6 +39,8 @@ public class WirecraftPlugin extends JavaPlugin implements Listener {
     FileConfiguration config = getConfig();
     Pin testPin;
     Pin inputPin;
+    BukkitTask inputTask;
+    ConcurrentLinkedQueue<Object> eventQ = new ConcurrentLinkedQueue<Object>();
 
     World mainWorld;
     private Logger log;
@@ -43,14 +53,21 @@ public class WirecraftPlugin extends JavaPlugin implements Listener {
 
         // Get config options
         config.addDefault("printAllRedstoneEvents", false);
-        config.addDefault("serialDevice", "/dev/ttyUSB0");
+        config.addDefault("deviceIsNetwork", false);
+        config.addDefault("devicePath", "/dev/ttyUSB0");
         config.options().copyDefaults(true);
         saveConfig();
 
         // Initialize Firmata device
-        // device = new FirmataDevice(config.getString("serialDevice"));
         log.info("Initializing Firmata device...");
-        device = new FirmataDevice(new NetworkTransport("localhost:8555"));
+        TransportInterface fmtTransport;
+        if(config.getBoolean("deviceIsNetwork")) {
+            fmtTransport = new NetworkTransport(config.getString("devicePath"));
+        }
+        else {
+            fmtTransport = new SerialTransport(config.getString("devicePath"));
+        }
+        device = new FirmataDevice(fmtTransport);
         try {
             device.start();
             device.ensureInitializationIsDone();
@@ -59,7 +76,7 @@ public class WirecraftPlugin extends JavaPlugin implements Listener {
             testPin = device.getPin(0);
             testPin.setMode(Mode.OUTPUT);
             inputPin = device.getPin(2);
-            
+            inputPin.setMode(Mode.INPUT);
 
             mainWorld = getServer().getWorld("world");
             inputPin.addEventListener(new PinEventListener() {
@@ -75,6 +92,11 @@ public class WirecraftPlugin extends JavaPlugin implements Listener {
                         mat = Material.REDSTONE_BLOCK;
                     }
                     // mainWorld.getBlockAt(5, 64, 5).setType(mat);
+                    List<Object> eventData = new ArrayList<Object>();
+                    int[] pos = {5, 64, 5};
+                    eventData.add(pos);
+                    eventData.add(mat);
+                    eventQ.add(eventData);
                     log.log(Level.INFO, "block: " + mainWorld.getBlockAt(5, 64, 5).getType().name());
                 }
             });
@@ -93,10 +115,24 @@ public class WirecraftPlugin extends JavaPlugin implements Listener {
                     log.info("device onPinChange, pin: " + pin.getIndex() + ", value: " + pin.getValue() + ", mode: " + pin.getMode().name());
                 }
             });
-            inputPin.setMode(Mode.INPUT);
-            inputPin.setMode(Mode.PULLUP);
 
             log.info("Wirecraft Plugin enabled!");
+
+            // Start input tick task
+            inputTask = Bukkit.getScheduler().runTaskTimer(this, new Runnable() {
+                @Override
+                public void run() {
+                    if(true) {
+                        if(!eventQ.isEmpty()) {
+                            ArrayList<Object> event = (ArrayList<Object>)eventQ.remove();
+                            int[] pos = (int[])event.get(0);
+                            Material mat = (Material)event.get(1);
+                            mainWorld.getBlockAt(pos[0], pos[1], pos[2]).setType(mat);
+                        }
+                    }
+                }
+            }, 0, 0);
+            
         }
         catch(Exception e) {
             log.log(Level.SEVERE, "Failed to initialize Firmata device!", e);
@@ -113,6 +149,7 @@ public class WirecraftPlugin extends JavaPlugin implements Listener {
     public void onDisable() {
         try {
             device.stop();
+            inputTask.cancel();
         }
         catch(IOException e) {
             log.log(Level.WARNING, "Could not stop Firmata device.", e);
