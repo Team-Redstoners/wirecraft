@@ -36,9 +36,7 @@ import org.firmata4j.transport.TransportInterface;
 public class WirecraftPlugin extends JavaPlugin implements Listener {
 
     IODevice device;
-    FileConfiguration config = getConfig();
-    Pin testPin;
-    Pin inputPin;
+    FileConfiguration config = getConfig();;
     BukkitTask inputTask;
     ConcurrentLinkedQueue<Object> eventQ = new ConcurrentLinkedQueue<Object>();
 
@@ -87,8 +85,8 @@ public class WirecraftPlugin extends JavaPlugin implements Listener {
                 @Override
                 public void onValueChange(IOEvent event) {
                     log.log(Level.INFO, "Value change: " + event.getValue());
-                    Material mat = Material.AIR;
-                    if(event.getValue() == 0) {
+                    Material mat = Material.STONE;
+                    if(event.getValue() == 1) {
                         mat = Material.REDSTONE_BLOCK;
                     }
                     // mainWorld.getBlockAt(5, 64, 5).setType(mat);
@@ -140,7 +138,7 @@ public class WirecraftPlugin extends JavaPlugin implements Listener {
                 device.stop();
             }
             catch(IOException ex) {
-                log.warning("Failed to stop Firmata device. Whatever.");
+                log.warning("Failed to stop Firmata device. Whatever, ignoring.");
             }
         }
     }
@@ -194,17 +192,4 @@ public class WirecraftPlugin extends JavaPlugin implements Listener {
             }
         }
     }
-
-    @EventHandler
-    public void onPlayerJoin(PlayerJoinEvent event) {
-        event.getPlayer().sendMessage(Component.text("Hello, " + event.getPlayer().getName() + "!"));
-        try {
-            inputPin.setMode(Mode.INPUT);
-            inputPin.setMode(Mode.PULLUP);
-        }
-        catch(IOException ex) {
-            log.warning("erm???");
-        }
-    }
-
 }
