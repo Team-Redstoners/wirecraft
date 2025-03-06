@@ -57,7 +57,7 @@ void MainWindow::logTextEdit_appendText(QString logStr)
 void MainWindow::on_serialConnectPushButton_clicked()
 {
     serialPort->setPortName(ui->serialPortLineEdit->text());
-    serialPort->setBaudRate(QSerialPort::Baud115200, QSerialPort::AllDirections);
+    serialPort->setBaudRate(QSerialPort::Baud57600, QSerialPort::AllDirections);
     serialPort->setDataBits(QSerialPort::UnknownDataBits);
     serialPort->setParity(QSerialPort::NoParity);
     serialPort->setStopBits(QSerialPort::UnknownStopBits);
