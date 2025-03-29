@@ -23,6 +23,8 @@ public interface WirecraftDevice {
     public void acceptEvent(BlockRedstoneEvent event);
     public void stop();
     public void setLocation(int[] coords, CoordDirection direction);
+    public int[] getLocation();
+    public CoordDirection getDirection();
     public int getPinCount();
     public int firmataPinToRSPin(int firmataPin);
     public int rsPinToFirmataPin(int rsPin);

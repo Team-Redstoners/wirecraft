@@ -19,8 +19,8 @@ public class S3DevKit implements WirecraftDevice {
 
     // Pin mapping. Gosh this is awful
     // RS pin -> Firmata pin
-    // -1 indicates disabled/special pin
-    public static final ImmutableBiMap<Integer, Integer> pinMapping = new ImmutableBiMap.Builder<Integer, Integer>()
+    // Negative indicates disabled/special pin
+    public ImmutableBiMap<Integer, Integer> pinMapping = new ImmutableBiMap.Builder<Integer, Integer>()
         // Left side of pins
         .put(1,-1)
         .put(3,4)
@@ -40,10 +40,10 @@ public class S3DevKit implements WirecraftDevice {
         .put(31,10)
         .put(33,11)
         .put(35,12)
-        .put(37,-1)
-        .put(39,-1)
+        .put(37,-2)
+        .put(39,-3)
         // Right side of pins
-        .put(2,-1)
+        .put(2,-4)
         .put(4,1)
         .put(6,2)
         .put(8,42)
@@ -61,12 +61,12 @@ public class S3DevKit implements WirecraftDevice {
         .put(32,21)
         .put(34,14)
         .put(36,13)
-        .put(38,-1)
-        .put(40,-1)
+        .put(38,-5)
+        .put(40,-6)
         .build();
     // RS pin -> Firmata pin
     // Hopefully it doesn't crash with all the -1's in there
-    public static final ImmutableBiMap<Integer, Integer> inversePinMapping = pinMapping.inverse();
+    public ImmutableBiMap<Integer, Integer> inversePinMapping = pinMapping.inverse();
 
     FirmataDevice device;
     ConcurrentLinkedQueue<WireEvent> eventQ;
@@ -96,38 +96,62 @@ public class S3DevKit implements WirecraftDevice {
             catch(Exception ex) {
                 log.log(Level.WARNING, "Failed to stop Firmata device post-crash. Ignoring...");
             }
+            return;
         }
 
         // Set all pins to input
         for(Pin pin : device.getPins()) {
             try {
-                pin.setMode(Mode.INPUT);
+                // Unknown bug: ConfigurableFirmata initializes all pins as input
+                // However, these inputs don't work. Set them to another mode first (like pullups)
+                // if(pin.getSupportedModes().contains(Mode.INPUT)) {
+                //     pin.setMode(Mode.INPUT);
+                //     // log.info("Set pin " + pin.getIndex() + " to INPUT");
+                // }
+                // if(pin.getSupportedModes().contains(Mode.PULLUP)) {
+                //     pin.setMode(Mode.PULLUP);
+                // }
+                
             }
             catch(Exception e) {
                 log.log(Level.WARNING, "Failed setting firmata pin mode", e);
             }
         }
+        try {
+            device.getPin(0).setMode(Mode.PULLUP);
+            device.getPin(0).setMode(Mode.INPUT);
+        }
+        catch(Exception e) {
+            log.log(Level.WARNING, "Failed setting firmata pin mode", e);
+        }
         // Yippee, hopefully we're ready now
         // Now register an event handler for the device
         device.addEventListener(new IODeviceEventListener() {
             @Override
-            public void onStart(IOEvent event) {}
+            public void onStart(IOEvent event) {
+                log.info("Start event listener for S3DevKit-" + deviceID);
+            }
             @Override
             public void onStop(IOEvent event) {}
             @Override
             public void onMessageReceive(IOEvent event, String message) {
-                log.log(Level.FINEST, "Recv message from S3DevKit: " + message);
+                log.log(Level.INFO, "Recv message from S3DevKit: " + message);
             }
             @Override
             public void onPinChange(IOEvent event) {
                 Pin pin = event.getPin();
-                log.log(Level.FINEST, "device onPinChange, pin: " + pin.getIndex() + ", value: " + pin.getValue() + ", mode: " + pin.getMode().name());
-                if(pin.getMode() == Mode.INPUT) {
-                    WireEvent event2 = new WireEvent(deviceID, pin.getIndex(), pin.getValue() == 1);
-                    eventQ.add(event2);
+                log.log(Level.INFO, "device onPinChange, pin: " + pin.getIndex() + ", value: " + pin.getValue() + ", mode: " + pin.getMode().name());
+                if(active) {
+                    if(pin.getMode() == Mode.INPUT) {
+                        WireEvent event2 = new WireEvent(deviceID, pin.getIndex(), pin.getValue() == 1);
+                        eventQ.add(event2);
+                    }
                 }
             }
         });
+
+
+        log.info("Finished constructing S3DevKit-" + deviceID);
     }
 
     public int getDeviceID() {
@@ -206,8 +230,16 @@ public class S3DevKit implements WirecraftDevice {
 
     public void setLocation(int[] coords, CoordDirection direction) {
         active = true;
-        baseCoords = coords;
+        baseCoords = coords.clone();
         coordDirection = direction;
         // TODO place down blocks in real world
+    }
+
+    public int[] getLocation() {
+        return baseCoords.clone();
+    }
+
+    public CoordDirection getDirection() {
+        return coordDirection;
     }
 }

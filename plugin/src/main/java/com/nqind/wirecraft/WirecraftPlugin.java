@@ -34,6 +34,7 @@ import com.google.common.collect.HashBiMap;
 import com.google.common.collect.ImmutableBiMap;
 import com.nqind.wirecraft.device.S3DevKit;
 import com.nqind.wirecraft.device.WirecraftDevice;
+import com.nqind.wirecraft.device.WirecraftDevice.CoordDirection;
 
 public class WirecraftPlugin extends JavaPlugin implements Listener {
 
@@ -58,6 +59,11 @@ public class WirecraftPlugin extends JavaPlugin implements Listener {
         config.options().copyDefaults(true);
         saveConfig();
 
+        // Get Bukkit world
+        // Even freaking md_5 themselves says to use getWorlds().get(0) for the main world
+        // Wtf md_5
+        mainWorld = getServer().getWorlds().getFirst();
+
         // Initialize Firmata device
         log.info("Initializing Firmata device...");
         TransportInterface fmtTransport;
@@ -69,6 +75,7 @@ public class WirecraftPlugin extends JavaPlugin implements Listener {
         }
         try {
             device = new S3DevKit(0, fmtTransport, eventQ);
+            device.setLocation(new int[]{0,64,0}, CoordDirection.SOUTH);
 
             log.info("Wirecraft Plugin enabled!");
 
@@ -79,12 +86,44 @@ public class WirecraftPlugin extends JavaPlugin implements Listener {
                     if(true) {
                         if(!eventQ.isEmpty()) {
                             WireEvent event = eventQ.remove();
+                            log.log(Level.INFO, "Processing event: wire pin #" + event.pinNum + " went " + event.state);
                             // TODO: WHAT DO I DO NEXT!
                             // Convert wirecraft pin to RS pin
-                            int rsPin = event.pinNum;
-                            int[] pos = (int[])event.get(0);
-                            Material mat = (Material)event.get(1);
+                            int rsPin = device.firmataPinToRSPin(event.pinNum);
+                            // Convert RS pin to relative coordinate offset
+                            // X is either 0 or 3 - odd is 0, even is 3
+                            int offX = (1 - (rsPin % 2)) * 3;
+                            int oldOffX = offX;  // saved for east/west where coords are swapped
+                            // Z is just pin/2 floored, multiplied by 2 again
+                            int offZ = Math.floorDiv(rsPin, 2) * 2;
+                            // Now rotate the coordinates in multiples of 90 degrees based on the device orientation
+                            switch(device.getDirection()) {
+                                case NORTH:
+                                    // Mirror both coordinates
+                                    offX = -offX;
+                                    offZ = -offZ;
+                                    break;
+                                case EAST:
+                                    offX = offZ;
+                                    offZ = -oldOffX;
+                                    break;
+                                case WEST:
+                                    offX = -offZ;
+                                    offZ = oldOffX;
+                                    break;
+                                case SOUTH:
+                                    // Do nothing
+                                    break;
+                                default:
+                                log.log(Level.WARNING, "Unknown direction", device.getDirection());
+                                    break;
+                            }
+                            int[] pos = device.getLocation();
+                            pos[0] += offX;
+                            pos[2] += offZ;
+                            Material mat = event.state ? Material.REDSTONE_BLOCK : Material.STONE;
                             mainWorld.getBlockAt(pos[0], pos[1], pos[2]).setType(mat);
+                            log.info("Set block {" + pos[0] + "," + pos[1] + "," + pos[2] + "} to " + mat.toString());
                         }
                     }
                 }
@@ -102,7 +141,7 @@ public class WirecraftPlugin extends JavaPlugin implements Listener {
             device.stop();
             inputTask.cancel();
         }
-        catch(IOException e) {
+        catch(Exception e) {
             log.log(Level.WARNING, "Could not stop Firmata device.", e);
         }
     }
@@ -138,9 +177,10 @@ public class WirecraftPlugin extends JavaPlugin implements Listener {
                 + (block.isBlockPowered() ? "ON" : "OFF")
             ));
             try {
-                testPin.setValue(block.isBlockPowered() ? 1 : 0);
+                // testPin.setValue(block.isBlockPowered() ? 1 : 0);
+                log.warning("STUB TODO");
             }
-            catch(IOException e) {
+            catch(Exception e) {
                 log.log(Level.SEVERE, "Communication error to Firmata device!", e);
             }
         }
