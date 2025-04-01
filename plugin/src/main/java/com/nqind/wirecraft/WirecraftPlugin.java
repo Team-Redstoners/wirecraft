@@ -16,6 +16,8 @@ import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
+import org.bukkit.block.data.type.Repeater;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -97,19 +99,24 @@ public class WirecraftPlugin extends JavaPlugin implements Listener {
                             // Z is just pin/2 floored, multiplied by 2 again
                             int offZ = Math.floorDiv(rsPin, 2) * 2;
                             // Now rotate the coordinates in multiples of 90 degrees based on the device orientation
+                            // Also get the repeater direction for the odd-numbered pin repeaters
+                            BlockFace repeaterDir = BlockFace.WEST;
                             switch(device.getDirection()) {
                                 case NORTH:
                                     // Mirror both coordinates
                                     offX = -offX;
                                     offZ = -offZ;
+                                    repeaterDir = BlockFace.EAST;
                                     break;
                                 case EAST:
                                     offX = offZ;
                                     offZ = -oldOffX;
+                                    repeaterDir = BlockFace.SOUTH;
                                     break;
                                 case WEST:
                                     offX = -offZ;
                                     offZ = oldOffX;
+                                    repeaterDir = BlockFace.NORTH;
                                     break;
                                 case SOUTH:
                                     // Do nothing
@@ -121,8 +128,16 @@ public class WirecraftPlugin extends JavaPlugin implements Listener {
                             int[] pos = device.getLocation();
                             pos[0] += offX;
                             pos[2] += offZ;
-                            Material mat = event.state ? Material.REDSTONE_BLOCK : Material.STONE;
-                            mainWorld.getBlockAt(pos[0], pos[1], pos[2]).setType(mat);
+                            // Material mat = event.state ? Material.REDSTONE_BLOCK : Material.STONE;
+                            Block block = mainWorld.getBlockAt(pos[0], pos[1], pos[2]);
+                            Material mat = Material.REPEATER;
+                            block.setType(mat);
+                            Repeater repeaterData = (Repeater)mat.createBlockData();
+                            repeaterData.setPowered(event.state);
+                            repeaterData.setLocked(true);
+                            // Set the direction to the opposite if it's an even numbered pin
+                            repeaterData.setFacing(rsPin % 2 == 0 ? repeaterDir.getOppositeFace() : repeaterDir);
+                            block.setBlockData(repeaterData);
                             log.info("Set block {" + pos[0] + "," + pos[1] + "," + pos[2] + "} to " + mat.toString());
                         }
                     }

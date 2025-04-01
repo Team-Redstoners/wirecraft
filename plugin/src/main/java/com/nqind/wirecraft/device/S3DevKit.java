@@ -102,14 +102,19 @@ public class S3DevKit implements WirecraftDevice {
         // Set all pins to input
         for(Pin pin : device.getPins()) {
             try {
+                // Unknown bug 2: setting all pins' modes at once crashes the device
+                // So just DON'T DO THAT. Let the user set the pins
+                
                 // Unknown bug: ConfigurableFirmata initializes all pins as input
                 // However, these inputs don't work. Set them to another mode first (like pullups)
                 // if(pin.getSupportedModes().contains(Mode.INPUT)) {
                 //     pin.setMode(Mode.INPUT);
+                //     Thread.sleep(50);
                 //     // log.info("Set pin " + pin.getIndex() + " to INPUT");
                 // }
                 // if(pin.getSupportedModes().contains(Mode.PULLUP)) {
                 //     pin.setMode(Mode.PULLUP);
+                //     Thread.sleep(50);
                 // }
                 
             }
@@ -119,6 +124,7 @@ public class S3DevKit implements WirecraftDevice {
         }
         try {
             device.getPin(0).setMode(Mode.PULLUP);
+            Thread.sleep(5);
             device.getPin(0).setMode(Mode.INPUT);
         }
         catch(Exception e) {
