@@ -4,6 +4,11 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import org.bukkit.Material;
+import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
+import org.bukkit.block.data.type.Repeater;
+import org.bukkit.entity.Player;
 import org.bukkit.event.block.BlockRedstoneEvent;
 import org.firmata4j.IODeviceEventListener;
 import org.firmata4j.IOEvent;
@@ -199,26 +204,38 @@ public class S3DevKit implements WirecraftDevice {
         return device.getPinsCount();
     }
 
-    public boolean setMode(int pin, Mode mode) {
+    public boolean setMode(int rsPin, Mode mode) {
         try {
-            device.getPin(pin).setMode(mode);
+            int pin = this.rsPinToFirmataPin(rsPin);
+            if(pin < 0) {
+                return false;
+            }
+            Pin dPin = device.getPin(pin);
+            if(!dPin.supports(mode)) {
+                return false;
+            }
+            dPin.setMode(mode);
             return true;
         }
         catch(Exception e) {
-            log.log(Level.WARNING, "Failed setting pin mode " + pin + " to " + mode.toString(), e);
+            log.log(Level.WARNING, "Failed setting pin mode " + rsPin + " to " + mode.toString(), e);
             return false;
         }
     }
 
-    public boolean setOutputPin(int pin, boolean state) {
-        Pin dPin = device.getPin(pin);
+    public boolean setOutputPin(int rsPin, boolean state) {
+        int fPin = this.rsPinToFirmataPin(rsPin);
+        if(fPin < 0) {
+            return false;
+        }
+        Pin dPin = device.getPin(fPin);
         if(dPin.getMode() == Mode.OUTPUT) {
             try {
-                device.getPin(pin).setValue(state ? 1 : 0);
+                dPin.setValue(state ? 1 : 0);
                 return true;
             }
             catch(Exception e) {
-                log.log(Level.WARNING, "Failed setting pin val " + pin + " to " + state, e);
+                log.log(Level.WARNING, "Failed setting pin val " + rsPin + " to " + state, e);
             }
         }
         return false;
@@ -245,7 +262,84 @@ public class S3DevKit implements WirecraftDevice {
         return baseCoords.clone();
     }
 
+    public int[] getOuterCorner() {
+        int[] corner = baseCoords.clone();
+        switch(coordDirection) {
+            case CoordDirection.NORTH:
+                corner[0] -= 3;
+                corner[2] -= Math.floorDiv(device.getPinsCount() - 1, 2) * 2;
+                break;
+            case CoordDirection.EAST:
+                corner[2] -= 3;
+                corner[0] += Math.floorDiv(device.getPinsCount() - 1, 2) * 2;
+                break;
+            case CoordDirection.WEST:
+                corner[2] += 3;
+                corner[0] -= Math.floorDiv(device.getPinsCount() - 1, 2) * 2;
+                break;
+            case CoordDirection.SOUTH:
+                corner[0] += 3;
+                corner[2] += Math.floorDiv(device.getPinsCount() - 1, 2) * 2;
+                break;
+        }
+        return corner;
+    }
+
     public CoordDirection getDirection() {
         return coordDirection;
+    }
+
+    // Returns -1 on failure
+    public int coordToRSPin(int x, int y, int z) {
+        // Filter for if it happened inside a cuboid where the device lives in
+        // There's probably a library to do this but whatever
+        int[] a = this.getLocation();
+        int[] b = this.getOuterCorner();
+        int[] minCuboid = {
+            Math.min(a[0], b[0]),
+            Math.min(a[1], b[1]),
+            Math.min(a[2], b[2]),
+        };
+        int[] maxCuboid = {
+            Math.max(a[0], b[0]),
+            Math.max(a[1], b[1]),
+            Math.max(a[2], b[2]),
+        };
+        if(
+        x >= minCuboid[0] && x <= maxCuboid[0] &&
+        y >= minCuboid[1] && y <= maxCuboid[1] &&
+        z >= minCuboid[2] && z <= maxCuboid[2]) {
+            // Get the coordinate offset
+            int[] coordOffset = {
+                x - a[0],
+                y - a[1],
+                z - a[2]
+            };
+            // Rotate it back to south-facing
+            int oldOffX = coordOffset[0];
+            switch(this.getDirection()) {
+                case NORTH:
+                    coordOffset[0] = -coordOffset[0];
+                    coordOffset[2] = -coordOffset[2];
+                    break;
+                case EAST:
+                    coordOffset[0] = coordOffset[2];
+                    coordOffset[2] = -oldOffX;
+                    break;
+                case WEST:
+                    coordOffset[0] = -coordOffset[2];
+                    coordOffset[2] = oldOffX;
+                    break;
+                case SOUTH:
+                    // Do nothing
+                    break;
+            }
+            // Can this offset be converted back into a pin?
+            if(coordOffset[1] == 0 && (coordOffset[0] == 0 || coordOffset[0] == 3) && coordOffset[2] % 2 == 0) {
+                // Convert it!
+                return coordOffset[2] + Math.floorDiv(coordOffset[0], 3) + 1;
+            }
+        }
+        return -1;
     }
 }

@@ -18,8 +18,8 @@ public interface WirecraftDevice {
     }
     public int getDeviceID();
     public void setEventQ(ConcurrentLinkedQueue<WireEvent> eventQ);
-    public boolean setMode(int pin, Mode mode);
-    public boolean setOutputPin(int pin, boolean state);
+    public boolean setMode(int rsPin, Mode mode);
+    public boolean setOutputPin(int rsPin, boolean state);
     public void acceptEvent(BlockRedstoneEvent event);
     public void stop();
     public void setLocation(int[] coords, CoordDirection direction);
@@ -28,4 +28,8 @@ public interface WirecraftDevice {
     public int getPinCount();
     public int firmataPinToRSPin(int firmataPin);
     public int rsPinToFirmataPin(int rsPin);
+    public int[] getOuterCorner();
+
+    // Returns -1 on failure
+    public int coordToRSPin(int x, int y, int z);
 }
