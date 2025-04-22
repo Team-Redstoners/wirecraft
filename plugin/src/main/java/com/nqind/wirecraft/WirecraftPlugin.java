@@ -28,6 +28,7 @@ import org.firmata4j.transport.NetworkTransport;
 import org.firmata4j.transport.SerialTransport;
 import org.firmata4j.transport.TransportInterface;
 
+import com.nqind.wirecraft.NetworkTransportWC;
 import com.nqind.wirecraft.device.S3DevKit;
 import com.nqind.wirecraft.device.WirecraftDevice;
 import com.nqind.wirecraft.device.WirecraftDevice.CoordDirection;
@@ -71,7 +72,7 @@ public class WirecraftPlugin extends JavaPlugin implements Listener {
         log.info("Initializing Firmata device...");
         TransportInterface fmtTransport;
         if(config.getBoolean("deviceIsNetwork")) {
-            fmtTransport = new NetworkTransport(config.getString("devicePath"));
+            fmtTransport = new NetworkTransportWC(config.getString("devicePath"));
         }
         else {
             fmtTransport = new SerialTransport(config.getString("devicePath"));
@@ -132,7 +133,7 @@ public class WirecraftPlugin extends JavaPlugin implements Listener {
                     }
                 }
             }, 0, 0);
-            
+
         }
         catch(Exception e) {
             device.stop();
@@ -153,7 +154,7 @@ public class WirecraftPlugin extends JavaPlugin implements Listener {
     @EventHandler
     public void onBlockRedstoneEvent(BlockRedstoneEvent event) {
         Block block = event.getBlock();
-        
+
 
         // Debugging info in chat
         // TODO: move to logger.debug?
